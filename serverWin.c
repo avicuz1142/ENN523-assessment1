@@ -1,12 +1,4 @@
-/* tcpserver.c
-   This program implements a TCP client using socket programming.
-   Use it as a sample program only.
-
-   programmed by Glen Tian
-              on 23 February 2018
-              in Brisbane
-   5 Sep 2021 Glen Tian:
-			  Modified in accordance the Linux version for book
+/* ENN523A1 - UDP Server (Window Version)
 */
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
@@ -22,7 +14,7 @@
 #define PORT   8886  /* port number */
 #define BUFLEN 1024  /* buffer length */
 #define PERIOD 1000  /* in milliseconds */
-#define LOOPLIMIT 8  /* loop testing send()/recv() */
+#define LOOPLIMIT 8  /* loop testing sendto()/recvfrom() */
 #define QUITKEY 0x1b /* ASCII code of ESC */
 
 #pragma comment(lib,"ws2_32.lib")
@@ -30,14 +22,17 @@
 int main(void){
 	WSADATA wsa_data;             /* type defined in winsock2.h */
 	SOCKET sockfd, acptdsock;     /* type defined in winsock2.h */
-	struct sockaddr_in servaddr;  /* struct in winsock2.h */
+	struct sockaddr_in servaddr, clientAddr;  /* struct in winsock2.h */
 	int addrlen=sizeof(servaddr),recvStatus, i=0;
 	char buffer[BUFLEN] = {0};
 	char *hello = "Hi from server";
 	char cmd = QUITKEY; /* character ESC */
 	bool stop = false;  /* bool tyle in stdbool.h. stop running */
 
-	printf("======== TCP Server ========\n");
+	struct sockaddr &serverAddrCast = (struct sockaddr &) servaddr;
+	struct sockaddr &clientrAddrCast = (struct sockaddr &) clientAddr;
+
+	printf("======== UDP Server ========\n");
 	/* Step 1: startup winsocket - this is for Windows only */
 	/* in pair with WSACleanup() */
 	if(WSAStartup(MAKEWORD(2,2), &wsa_data) != 0){
@@ -47,7 +42,8 @@ int main(void){
 
 	/* Step 2: Create socket and check it is successful */
 	/* in pair with closesocket()   */
-	if ((sockfd = socket(AF_INET,SOCK_STREAM,0))==SOCKET_ERROR){
+	/* SOCK_STREAM forTCP, SOCK_DGRAM for UDP*/
+	if ((sockfd = socket(AF_INET,SOCK_DGRAM,0))==SOCKET_ERROR){
 		printf("socket() failed: %d\n", WSAGetLastError());
 		exit(INVALID_SOCKET);
 	}
@@ -63,23 +59,25 @@ int main(void){
 		exit(SOCKET_ERROR);
 	}
 
-	/* Step 4: Listen */
+	/* Listen and Accept step are for TCP
+	// Step 4: Listen
     if ((listen(sockfd,8)) == SOCKET_ERROR){
 		printf("listen() failed: %d\n", WSAGetLastError());
 		exit(SOCKET_ERROR);
 	}
 
-	/* Step 5: Accept */
+	// Step 5: Accept
 	printf("\nServer awaiting connection....\n");
 	if ((acptdsock = accept(sockfd,(struct sockaddr *)&servaddr,&addrlen))==INVALID_SOCKET){
 		printf("accept() failed: %d\n", WSAGetLastError());
 		exit(SOCKET_ERROR);
 	}
 	printf("....Connection established\n");
+	*/
 
 	/* Step 6: Send/Receive Data in loop */
 	while (1){
-		if ((send(acptdsock,hello,strlen(hello),0)) == SOCKET_ERROR){
+		if ((sendto(acptdsock,hello,strlen(hello),0)) == SOCKET_ERROR){
 			printf("send() failed: \n",WSAGetLastError());
 			exit(SOCKET_ERROR);
 		}
