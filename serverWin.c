@@ -77,17 +77,18 @@ int main(void){
 
 	/* Step 6: Send/Receive Data in loop */
 	while (1){
-		if ((sendto(acptdsock,hello,strlen(hello),0)) == SOCKET_ERROR){
-			printf("send() failed: \n",WSAGetLastError());
+		int clientSize = sizeof(clientAddr);
+		if ((sendto(acptdsock,hello,strlen(hello),0, clientrAddrCast, clientSize)) == SOCKET_ERROR){
+			printf("sendto() failed: \n",WSAGetLastError());
 			exit(SOCKET_ERROR);
 		}
 		printf("%2d Sent:     %s\n",i,hello);
 
-		recvStatus = recv(acptdsock,buffer,BUFLEN-1,0);
+		recvStatus = recvfrom(acptdsock,buffer,BUFLEN-1,0, , clientrAddrCast, &clientSize);
 	    if(recvStatus == 0)
 		   	break;
 	    if (recvStatus == SOCKET_ERROR){
-		    printf("recv() failed: %d\n",WSAGetLastError());
+		    printf("recvfrom() failed: %d\n",WSAGetLastError());
 		    break;
 		}
 		buffer[recvStatus] = 0x00; /* force ending with '\0' */
@@ -112,8 +113,8 @@ int main(void){
 		Sleep(PERIOD); /* PERIOD in milliseconds */
 	}
 
-	if ((send(acptdsock,&cmd,1,0)) == SOCKET_ERROR){
-		printf("send() failed: \n",WSAGetLastError());
+	if ((sendto(acptdsock,&cmd,1,0, clientrAddrCast, clientSize)) == SOCKET_ERROR){
+		printf("sendto() failed: \n",WSAGetLastError());
 		closesocket(sockfd);
 		WSACleanup();
 		exit(SOCKET_ERROR);
