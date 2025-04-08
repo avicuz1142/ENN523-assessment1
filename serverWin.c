@@ -79,11 +79,15 @@ int main() {
             char timestamp[32];
             getTimestamp(timestamp);
             sprintf(buffer, "R %05d %s", seqno, timestamp);
+
+            DWORD sendTime = GetTickCount(); // Start time for RTT
             sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
             printf("Sent: %s\n", buffer);
 
             // Receive ACK from client
             int recvStatus = recvfrom(sockfd, buffer, BUFLEN - 1, 0, (struct sockaddr*)&clientaddr, &addrlen);
+            DWORD ackReceiveTime = GetTickCount(); // End time for RTT
+
             if (recvStatus <= 0) break;
             buffer[recvStatus] = '\0';
 
@@ -97,6 +101,9 @@ int main() {
             sprintf(buffer, "ACK %05d %s", seqno, serverRecvTime);
             sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
             printf("Sent: %s\n", buffer);
+
+            DWORD rtt = ackReceiveTime - sendTime;
+            printf("RTT for seq %05d: %lu ms\n", seqno, rtt);
 
             seqno++;
             lastTick = now;
