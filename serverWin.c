@@ -9,28 +9,41 @@
 #include<stdlib.h>
 #include <windows.h>    /* winsock2.h has included windows.h */
 #include <stdbool.h>
+#include <winsock.h>
 
 #define SERVER_IP_ADDR "127.0.0.1" /*loopback for testing */
 #define PORT   8886  /* port number */
 #define BUFLEN 1024  /* buffer length */
-#define PERIOD 1000  /* in milliseconds */
+#define SLEEPTIME 3000  /* in milliseconds */
 #define LOOPLIMIT 8  /* loop testing sendto()/recvfrom() */
-#define QUITKEY 0x1b /* ASCII code of ESC */
+#define QUITKEY 'E' /* ASCII code of ESC */
 
 #pragma comment(lib,"ws2_32.lib")
 
+// Function to get current timestamp
+void getTimestamp(char* buffer) {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    sprintf(buffer, "%02d:%02d:%02d:%03d", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+}
+
+void sendFromServer(SOCKET sockfd, char buffer) {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    sprintf(buffer, "%02d:%02d:%02d:%03d", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+}
+
 int main(void){
 	WSADATA wsa_data;             /* type defined in winsock2.h */
-	SOCKET sockfd, acptdsock;     /* type defined in winsock2.h */
+	SOCKET sockfd;     /* type defined in winsock2.h */
 	struct sockaddr_in servaddr, clientAddr;  /* struct in winsock2.h */
 	int addrlen=sizeof(servaddr),recvStatus, i=0;
-	char buffer[BUFLEN] = {0};
+	char buffer[BUFLEN] = {0}, checkEnd[8] = "";
+	int seq = 1;
+	DWORD startTime, endTime;
 	char *hello = "Hi from server";
 	char cmd = QUITKEY; /* character ESC */
 	bool stop = false;  /* bool tyle in stdbool.h. stop running */
-
-	struct sockaddr &serverAddrCast = (struct sockaddr &) servaddr;
-	struct sockaddr &clientrAddrCast = (struct sockaddr &) clientAddr;
 
 	printf("======== UDP Server ========\n");
 	/* Step 1: startup winsocket - this is for Windows only */
@@ -59,69 +72,79 @@ int main(void){
 		exit(SOCKET_ERROR);
 	}
 
-	/* Listen and Accept step are for TCP
-	// Step 4: Listen
-    if ((listen(sockfd,8)) == SOCKET_ERROR){
-		printf("listen() failed: %d\n", WSAGetLastError());
-		exit(SOCKET_ERROR);
-	}
-
-	// Step 5: Accept
-	printf("\nServer awaiting connection....\n");
-	if ((acptdsock = accept(sockfd,(struct sockaddr *)&servaddr,&addrlen))==INVALID_SOCKET){
-		printf("accept() failed: %d\n", WSAGetLastError());
-		exit(SOCKET_ERROR);
-	}
-	printf("....Connection established\n");
-	*/
+	printf("UDP server running on port %d...\n", PORT);
 
 	/* Step 6: Send/Receive Data in loop */
+	int clientSize = sizeof(clientAddr);
 	while (1){
-		int clientSize = sizeof(clientAddr);
-		if ((sendto(acptdsock,hello,strlen(hello),0, clientrAddrCast, clientSize)) == SOCKET_ERROR){
+		char seqstr[8], timestamp[32];
+
+        // Send "R <seq> <timestamp>" to client
+		sprintf(seqstr, "%05d", seq);
+		startTime = GetTickCount();
+        getTimestamp(timestamp);
+        sprintf(buffer, "R %s %s", seqstr, timestamp);
+
+		if ((sendto(sockfd,buffer,strlen(buffer),0, (struct sockaddr*) &clientAddr, clientSize)) == SOCKET_ERROR){
 			printf("sendto() failed: \n",WSAGetLastError());
 			exit(SOCKET_ERROR);
 		}
-		printf("%2d Sent:     %s\n",i,hello);
+		printf("Sent:     %s\n",buffer);
 
-		recvStatus = recvfrom(acptdsock,buffer,BUFLEN-1,0, , clientrAddrCast, &clientSize);
+		// Receive
+		recvStatus = recvfrom(sockfd,buffer,BUFLEN-1,0, (struct sockaddr*) &clientAddr, &clientSize);
 	    if(recvStatus == 0)
 		   	break;
 	    if (recvStatus == SOCKET_ERROR){
 		    printf("recvfrom() failed: %d\n",WSAGetLastError());
 		    break;
 		}
+		endTime = GetTickCount();
+		getTimestamp(timestamp);
 		buffer[recvStatus] = 0x00; /* force ending with '\0' */
 		printf("    Received: %s\n",buffer);
 
+		// Process ACK R from client
+		if (strncmp(buffer, "ACK R", 5) == 0) {
+            printf("RTT for seq %s = %s ms\n", seqstr, endTime - startTime);
+            sprintf(buffer, "ACK %s %s", seqstr, get_time_str());
+            sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientAddr, clientSize);
+            printf("Sent: %s\n", buffer);
+        }
+
+		int checkNum = scanf("%s", &checkEnd);
+		if (checkNum == 1 && (checkEnd == QUITKEY || checkEnd == tolower(QUITKEY))) {
+			sprintf(buffer, "ACK E %s %s", seqstr, get_time_str());
+            sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*) &clientAddr, clientSize);
+            printf("Sent Termination ACK: %s\n", buffer);
+
+            // Final ACK from client
+            recvStatus = recvfrom(sockfd, buffer, BUFLEN, 0, (struct sockaddr*) &clientAddr, &clientSize);
+            if (recvStatus == SOCKET_ERROR) {
+                printf("Final ACK receive failed: %d\n", WSAGetLastError());
+            } else {
+                buffer[recvStatus] = '\0';
+                printf("Received Final ACK: %s\n", buffer);
+				if (strncmp(buffer, "ACK E", 5) == 0) {
+					printf("RTT for seq %s = %s ms\n", seqstr, endTime - startTime);
+					sprintf(buffer, "ACK %s %s", seqstr, get_time_str());
+					sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientAddr, clientSize);
+					printf("Sent: %s\n", buffer);
+				}
+            }
+            break;
+		}
+
 		if ((++i) == LOOPLIMIT)     /* LOOPLIMIT reached */
 			break;  /* make sure i within integrer limit */
-
-		while ((kbhit()) && (!stop)){
-			cmd = getch();
-			fflush(stdout);
-			if (cmd == QUITKEY){
-				stop = true;
-				printf("Terminating by kbd cmd 0x%x...\n",cmd);
-				break;
-			}
-		}
-		if (stop)
-			break;
-
-
-		Sleep(PERIOD); /* PERIOD in milliseconds */
-	}
-
-	if ((sendto(acptdsock,&cmd,1,0, clientrAddrCast, clientSize)) == SOCKET_ERROR){
-		printf("sendto() failed: \n",WSAGetLastError());
-		closesocket(sockfd);
-		WSACleanup();
-		exit(SOCKET_ERROR);
+		
+		seq++;
+		Sleep(SLEEPTIME); /* SLEEPTIME in milliseconds */
+		scanf("%s", &checkEnd);
 	}
 
 	/* Step 7: Close socket, in pair with socket() */
-	Sleep(2000); /* Allow client to recv last msg without WSAECONNREST err*/
+	// Sleep(2000); /* Allow client to recv last msg without WSAECONNREST err*/
 	if ((closesocket(sockfd))== SOCKET_ERROR){
 		printf("closesocket() failed: %d\n",WSAGetLastError());
 		exit(SOCKET_ERROR);
