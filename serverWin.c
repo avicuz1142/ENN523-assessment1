@@ -41,6 +41,8 @@ int main(void){
 	char buffer[BUFLEN] = {0}, checkEnd[8] = "";
 	int seq = 1;
 	DWORD startTime, endTime;
+	char *hello = "Hi from server";
+	char cmd = QUITKEY; /* character ESC */
 	bool stop = false;  /* bool tyle in stdbool.h. stop running */
 
 	printf("======== UDP Server ========\n");
@@ -59,7 +61,7 @@ int main(void){
 		exit(INVALID_SOCKET);
 	}
 
-	/* Step 3: Bind to local UDP Server*/
+	/* Step 3: Bind to local TCP Server*/
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = inet_addr(SERVER_IP_ADDR);
 	servaddr.sin_port = htons(PORT);
@@ -74,7 +76,7 @@ int main(void){
 
 	/* Step 6: Send/Receive Data in loop */
 	int clientSize = sizeof(clientAddr);
-	while (!stop){
+	while (1){
 		char seqstr[8], timestamp[32];
 
         // Send "R <seq> <timestamp>" to client
@@ -110,13 +112,11 @@ int main(void){
             printf("Sent: %s\n", buffer);
         }
 
-		// if input 'E' or 'e', when end
 		int checkNum = scanf("%s", &checkEnd);
 		if (checkNum == 1 && (checkEnd == QUITKEY || checkEnd == tolower(QUITKEY))) {
-			// Send "E <seq> <timestamp>" to client
-			sprintf(buffer, "E %s %s", seqstr, get_time_str());
+			sprintf(buffer, "ACK E %s %s", seqstr, get_time_str());
             sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*) &clientAddr, clientSize);
-            printf("Sent: %s\n", buffer);
+            printf("Sent Termination ACK: %s\n", buffer);
 
             // Final ACK from client
             recvStatus = recvfrom(sockfd, buffer, BUFLEN, 0, (struct sockaddr*) &clientAddr, &clientSize);
@@ -124,17 +124,19 @@ int main(void){
                 printf("Final ACK receive failed: %d\n", WSAGetLastError());
             } else {
                 buffer[recvStatus] = '\0';
-                printf("Final Received: %s\n", buffer);
+                printf("Received Final ACK: %s\n", buffer);
 				if (strncmp(buffer, "ACK E", 5) == 0) {
 					printf("RTT for seq %s = %s ms\n", seqstr, endTime - startTime);
 					sprintf(buffer, "ACK %s %s", seqstr, get_time_str());
 					sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientAddr, clientSize);
-					printf("Final Sent: %s\n", buffer);
+					printf("Sent: %s\n", buffer);
 				}
             }
-			stop = true;
             break;
 		}
+
+		if ((++i) == LOOPLIMIT)     /* LOOPLIMIT reached */
+			break;  /* make sure i within integrer limit */
 		
 		seq++;
 		Sleep(SLEEPTIME); /* SLEEPTIME in milliseconds */
@@ -142,6 +144,7 @@ int main(void){
 	}
 
 	/* Step 7: Close socket, in pair with socket() */
+	// Sleep(2000); /* Allow client to recv last msg without WSAECONNREST err*/
 	if ((closesocket(sockfd))== SOCKET_ERROR){
 		printf("closesocket() failed: %d\n",WSAGetLastError());
 		exit(SOCKET_ERROR);
