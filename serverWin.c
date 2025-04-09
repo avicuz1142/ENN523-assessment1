@@ -31,6 +31,17 @@ bool loadConfig(char* ip, int* port) {
     return true;
 }
 
+//calculate RTT with millisecond precision
+LARGE_INTEGER getHighResTime() {
+    LARGE_INTEGER time;
+    QueryPerformanceCounter(&time);
+    return time;
+}
+
+double calculateElapsedTime(LARGE_INTEGER start, LARGE_INTEGER end, LARGE_INTEGER frequency) {
+    return (double)(end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
+}
+
 int main() {
     // === Initialization ===
     WSADATA wsa_data;
@@ -71,6 +82,8 @@ int main() {
 
     // === Main Communication Loop ===
     DWORD lastTick = GetTickCount();
+    LARGE_INTEGER frequency;
+    QueryPerformanceFrequency(&frequency);
     while (!stop) {
         DWORD now = GetTickCount();
 
@@ -80,13 +93,13 @@ int main() {
             getTimestamp(timestamp);
             sprintf(buffer, "R %05d %s", seqno, timestamp);
 
-            DWORD sendTime = GetTickCount(); // Start time for RTT
+            LARGE_INTEGER startTime = getHighResTime(); // Start time for RTT
             sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
             printf("Sent: %s\n", buffer);
 
             // Receive ACK from client
             int recvStatus = recvfrom(sockfd, buffer, BUFLEN - 1, 0, (struct sockaddr*)&clientaddr, &addrlen);
-            DWORD ackReceiveTime = GetTickCount(); // End time for RTT
+            LARGE_INTEGER endTime = getHighResTime(); // End time for RTT
 
             if (recvStatus <= 0) break;
             buffer[recvStatus] = '\0';
@@ -95,8 +108,8 @@ int main() {
                 sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
             printf("Sent: %s\n", buffer);
 
-            DWORD rtt = ackReceiveTime - sendTime;
-            printf("RTT for seq %05d: %lu ms\n", seqno, rtt);
+            double rtt = calculateElapsedTime(startTime, endTime, frequency);
+            printf("RTT for seq %05d: %.3f ms\n", seqno, rtt);
 
             seqno++;
             lastTick = now;
