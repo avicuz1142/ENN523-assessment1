@@ -104,8 +104,7 @@ int main() {
             if (recvStatus <= 0) break;
             buffer[recvStatus] = '\0';
 
-            @@ - 98, 34 + 102, 37 @@
-                sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
+            sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
             printf("Sent: %s\n", buffer);
 
             double rtt = calculateElapsedTime(startTime, endTime, frequency);
@@ -142,3 +141,4 @@ int main() {
     closesocket(sockfd);
     WSACleanup();
     return 0;
+}
