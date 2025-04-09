@@ -8,12 +8,9 @@
 #include<windows.h>    // Windows-specific functions and types
 #include<stdbool.h>    // boolean type support
 #include<time.h>       // time functions
-#include <winsock.h>
 
-#define SERVER_IP_ADDR "127.0.0.1" /*loopback for testing */
-#define PORT   8886  /* port number */
-#define BUFLEN 1024  /* buffer length */
-#define LOOPLIMIT 8  /* loop testing sendto()/recvfrom() */
+#define BUFLEN 1024
+#define QUITKEY 0x1b
 #define CONFIG_FILE "server_config.txt"
 
 #pragma comment(lib,"ws2_32.lib") // link with Winsock library
@@ -82,6 +79,7 @@ int main() {
             char timestamp[32];
             getTimestamp(timestamp);
             sprintf(buffer, "R %05d %s", seqno, timestamp);
+
             DWORD sendTime = GetTickCount(); // Start time for RTT
             sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
             printf("Sent: %s\n", buffer);
@@ -89,22 +87,17 @@ int main() {
             // Receive ACK from client
             int recvStatus = recvfrom(sockfd, buffer, BUFLEN - 1, 0, (struct sockaddr*)&clientaddr, &addrlen);
             DWORD ackReceiveTime = GetTickCount(); // End time for RTT
+
             if (recvStatus <= 0) break;
             buffer[recvStatus] = '\0';
 
-            char clientAckTime[32];
-            sscanf(buffer, "ACK R %*d %s", clientAckTime);
-            printf("Received: %s\n", buffer);
-
-            // Respond with final ACK and server's timestamp
-            char serverRecvTime[32];
-            getTimestamp(serverRecvTime);
-            sprintf(buffer, "ACK %05d %s", seqno, serverRecvTime);
-            sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
+            @@ - 98, 34 + 102, 37 @@
+                sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&clientaddr, addrlen);
             printf("Sent: %s\n", buffer);
 
             DWORD rtt = ackReceiveTime - sendTime;
             printf("RTT for seq %05d: %lu ms\n", seqno, rtt);
+
             seqno++;
             lastTick = now;
         }
@@ -136,4 +129,3 @@ int main() {
     closesocket(sockfd);
     WSACleanup();
     return 0;
-}
